@@ -24,25 +24,28 @@ class ShoppingServiceTest {
     private ShoppingServiceImpl shoppingService;
 
     /**
-     * Тестирование получения тележки для покупателя
+     * Тестирование получения тележки для покупателя.
+     * Возможно стоит проверить что тележка не null, но не факт, так как при вызове метода просто создается новая
+     * тележка.
      */
     @Test
     void testGetCart() {
         Customer customer = new Customer(12, "152");
-        Assertions.assertNotNull(shoppingService.getCart(customer));
+        Cart customerCarts = shoppingService.getCart(customer);
+        Assertions.assertNotNull(customerCarts);
     }
 
     /**
-     * Тестирование метода не нужно так как берутся все продукты из БД, изменения состояния, которое нужно проверить
-     * не происходит
+     * Тестирование метода не нужно, так как берутся все продукты из БД.
+     * Изменения состояния, которое нужно проверить не происходит.
      */
     @Test
     void testGetAllProducts() {
     }
 
     /**
-     * Тестирование метода не нужно, так как из БД берётся значение по имени товара, не идет изменение состояния,
-     * которое нужно проверять
+     * Тестирование метода не нужно, так как из БД берётся значение по имени товара.
+     * Изменения состояния, которое нужно проверить не происходит.
      */
     @Test
     void testGetProductByName() {
@@ -56,13 +59,51 @@ class ShoppingServiceTest {
     void testBuyProductsFromEmptyCart() throws BuyException {
         Customer customer = new Customer(1L, "customer");
         Cart cart = new Cart(customer);
-        boolean result = shoppingService.buy(cart);
-        Assertions.assertFalse(result);
+        boolean shopResult = shoppingService.buy(cart);
+        Assertions.assertFalse(shopResult);
+    }
+
+    /**
+     * Тестирование невозможности покупки товара из-за его нехватки.<br/>
+     * Были выявлены следующие (скорее) недочеты
+     * <ol>
+     *     <li>
+     *         Адекватной проверки скорее всего не получится, потому что по факту сейчас метод {@link Cart#add(Product, int)}
+     *         реализован некорректно, потому что сейчас количество продуктов уменьшается только при покупке товара, а не при
+     *         вкладывании его в корзину, поэтому приходится сначала производить покупку у первого покупателя, потом у второго.
+     *      </li>
+     *      <li>
+     *          Если продукт есть в n количестве, и мы захотим положить в корзину n штук, выкинется ошибка (странно).
+     *          Проверка должна быть в сервисе должна быть <= а не <
+     *      </li>
+     * </ol>
+     */
+    @Test
+    public void testBuyProductsException() throws BuyException {
+        Product testProduct = new Product();
+        testProduct.setName("apple");
+        testProduct.addCount(5);
+
+        Customer firstCustomer = new Customer(1L, "firstCustomer");
+        Cart firstCustomerCart = new Cart(firstCustomer);
+        firstCustomerCart.add(testProduct, 4);
+
+        Customer secondCustomer = new Customer(2L, "secondCustomer");
+        Cart secondCustomerCart = new Cart(secondCustomer);
+        secondCustomerCart.add(testProduct, 4);
+
+        shoppingService.buy(firstCustomerCart);
+
+        BuyException buyException = Assertions.assertThrows(BuyException.class, () -> {
+            boolean secondCustomerBuy = shoppingService.buy(secondCustomerCart);
+            Assertions.assertFalse(secondCustomerBuy);
+        });
+        Assertions.assertEquals("В наличии нет необходимого количества товара apple", buyException.getMessage());
     }
 
     /**
      * Тестирование покупки продуктов<br/>
-     * Пользователю добавляются продукты в карзину, после чего идёт покупка, и нужно проверить, что изменилось
+     * Пользователю добавляются продукты в корзину, после чего идёт покупка, и нужно проверить, что изменилось
      * состояние продуктов (их количество)
      * @throws BuyException ошибка покупки
      */
@@ -88,35 +129,6 @@ class ShoppingServiceTest {
         Assertions.assertTrue(result);
         Assertions.assertEquals(1, testProduct.getCount());
         Assertions.assertEquals(1, secondTestProduct.getCount());
-    }
-
-    /**
-     * Тестирование покупки товаров, когда в ассортименте нет необходимого количества
-     * @throws BuyException ошибка покупки
-     */
-    @Test
-    void testBuyWhenNotExistValidProductsCount() throws BuyException {
-        Product testProduct = new Product();
-        testProduct.setName("apple");
-        testProduct.addCount(5);
-
-        Customer firstCustomer = new Customer(1L, "firstCustomer");
-        Cart firstCustomerCart = new Cart(firstCustomer);
-        firstCustomerCart.add(testProduct, 4);
-
-        Customer secondCustomer = new Customer(2L, "secondCustomer");
-        Cart secondCustomerCart = new Cart(secondCustomer);
-        secondCustomerCart.add(testProduct, 2);
-
-        boolean firstCustomerBuy = shoppingService.buy(firstCustomerCart);
-
-        Exception exception = Assertions.assertThrows(Exception.class, () -> {
-            boolean secondCustomerBuy = shoppingService.buy(secondCustomerCart);
-            Assertions.assertFalse(secondCustomerBuy);
-        });
-        Assertions.assertTrue(firstCustomerBuy);
-        Assertions.assertEquals(
-                String.format("В наличии нет необходимого количества товара %s", testProduct.getName()), exception.getMessage());
     }
 
 }
